@@ -455,6 +455,7 @@ class Registration extends CI_Controller {
 						$t_dob=$dob.substr($dt_lmd_dob,2,2); //2017-08-30
 						$dt_dob=$dt_lmd_dob;
 						$int_subscriber_type_key=2; //b
+						$t_lmp=NULL;
 						}
 						else
 						{
