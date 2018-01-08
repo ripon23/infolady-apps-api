@@ -341,8 +341,7 @@ class Registration extends CI_Controller {
                         , 'SrcDrnkWater'                => $SrcDrnkWater
                         , 'NumberOfMobilePhoneAtHome'   => $NumberOfMobilePhoneAtHome
 						, 'MobileType'   				=> $phone_type
-                        , 'WhichCellWillReceiveContent' => $owner_of_msisdn
-                        , 'DialectID'                   => 'RURAL'                    
+                        , 'WhichCellWillReceiveContent' => $owner_of_msisdn                   
                         , 'Status'                      => 'Verified'
                         , 'is_active'                   => 1
                         , 'dtt_mod'                     => $date
@@ -366,6 +365,15 @@ class Registration extends CI_Controller {
 					);
 				$this->general_model->save_into_table('e_subscriber_status', $status_insert);
 				
+				$subscriber_maps= array(
+							  'int_e_subscriber_key'   => $e_insert_id
+							, 'int_user_key'           => 100001
+							, 'int_mod_user_key'        => 100001  // for tab user use this number as previous, dont know why 
+							, 'dtt_mod'             => $date
+					);					
+				$this->general_model->save_into_table('e_dataentry_subscriber_maps', $subscriber_maps);
+				
+				
 				$update_data=array(						
 						'server_reg_id'=>$e_insert_id,
 						'status'=>1,						
@@ -385,7 +393,13 @@ class Registration extends CI_Controller {
 				
 				if($subscription_type=='PREPAID')
 				{
+					$dialect_bridge = $dialect;
 					
+					if($dialect=='CTG')
+					$dialect_bridge='Chittagonian';
+					
+					if($dialect=='SHY')
+					$dialect_bridge='Sylhety';
 					
 					$json_response = $this->_isValidPincode($pin, $msisdn);
 					
@@ -407,7 +421,7 @@ class Registration extends CI_Controller {
 					$json = '{"MSISDN": "'.$msisdn.'",
 					"Designated_Date": "'.$designeted_date.'",
 					"Package": "'.$package.'", 
-					"Dialect": "'.$dialect.'", 
+					"Dialect": "'.$dialect_bridge.'", 
 					"Timeslot": "'.$delivery_channel.'", 
 					"Subscriber_Type": "'.$subscriber_type.'",
 					"Subscription_Date": "'.$subscription_date.'", 
@@ -456,6 +470,7 @@ class Registration extends CI_Controller {
 						$dt_dob=$dt_lmd_dob;
 						$int_subscriber_type_key=2; //b
 						$t_lmp=NULL;
+						$dtt_week_base=$dt_child_birth;
 						}
 						else
 						{
@@ -465,8 +480,10 @@ class Registration extends CI_Controller {
 						$t_dob=NULL;
 						$t_lmp=$lmp.substr($dt_lmd_dob,2,2); //2017-08-30
 						$int_subscriber_type_key=1; //p
+						$dtt_week_base=$dt_lmp;
 						}
-						if($delivery_channel='s')
+						
+						if($delivery_channel=='s')
 						{
 						$tx_distribution_channel='SMS';	
 						$int_timeslot=NULL;
@@ -488,7 +505,7 @@ class Registration extends CI_Controller {
 						'dt_last_menstrual_period' => $dt_lmp,
 						'tx_child_birth' => $t_dob,
 						'dt_child_birth' => $dt_dob,
-						'dtt_week_base' => $dt_child_birth,
+						'dtt_week_base' => $dtt_week_base,
 						'dtt_registration' => $subscription_date,
 						'dtt_service_deactivation' => $deactivation_date,
 						'dt_prepaid_service_from' => $subscription_date,

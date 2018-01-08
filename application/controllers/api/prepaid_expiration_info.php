@@ -52,7 +52,7 @@ class Prepaid_expiration_info extends CI_Controller {
 				else
 				{
 				# CA17700002 CC261604755	 
-				$dob_limit_in_week=$this->config->item("dob_limit_in_week");
+				//$dob_limit_in_week=$this->config->item("dob_limit_in_week");
 				$sql="SELECT DATEDIFF(SUB.`dtt_service_deactivation`, NOW()) AS remaining_days, SUB.`dtt_service_deactivation`, 
 SUB.`int_subscriber_key` AS t_subscriber_id, SUB.`tx_name`, SUB.`tx_mobile`,  
 SUB.`dt_last_menstrual_period` AS lmp,

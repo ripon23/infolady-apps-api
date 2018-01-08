@@ -12,11 +12,11 @@ class Dobupdate extends CI_Controller {
 		parent::__construct();
 
 		// Load the necessary stuff...
-		$this->load->helper(array('language', 'url', 'form', 'date'));		
-		$this->load->model(array('general_model','account/account_model'));	
-		$this->load->library(array('form_validation','date', 'subscriber'));			
-		date_default_timezone_set('Asia/Dhaka');  // set the time zone UTC+6				
-	}		
+		$this->load->helper(array('language', 'url', 'form', 'date'));
+		$this->load->model(array('general_model','account/account_model'));
+		$this->load->library(array('form_validation','date', 'subscriber','mamalib'));
+		date_default_timezone_set('Asia/Dhaka');  // set the time zone UTC+6
+	}
 	
 	
 	function index()
@@ -48,8 +48,9 @@ class Dobupdate extends CI_Controller {
 			if($request_id)
 			{
 			
-			$ref_reg_id=$this->input->post('ref_reg_id', TRUE); 
-			$ref_reg_id  = empty($ref_reg_id) ? NULL : $ref_reg_id;							
+			// ref_reg_id may not have few occasion
+			// $ref_reg_id=$this->input->post('ref_reg_id', TRUE);  
+			// $ref_reg_id  = empty($ref_reg_id) ? NULL : $ref_reg_id;							
 			
 			$dob=$this->input->post('dob', TRUE);
 			$dob  = empty($dob) ? NULL : $dob;
@@ -60,6 +61,7 @@ class Dobupdate extends CI_Controller {
 			$current_package='b';
 									
 			## REGISTRATION ID IS REQUIRED
+			/*
 			if(!$ref_reg_id)
 			{
 				$response["success"] = 0;
@@ -68,8 +70,10 @@ class Dobupdate extends CI_Controller {
 				$is_error=1;
 				$error_msg='REGISTRATION ID IS REQUIRED!';
 			}																																											
+			*/
 			
 			## INVALID REGISTRATION ID;
+			/*
 			if($ref_reg_id && $is_error!=1)
 			{
 				if(!$this->general_model->is_exist_in_a_table('chatbot_action_requests','success_reg_id',$ref_reg_id))
@@ -81,6 +85,7 @@ class Dobupdate extends CI_Controller {
 				$error_msg='REGISTRATION ID NOT FOUND!';
 				}
 			}
+			*/
 			
 			## DOB IS REQUIRED
 			if(!$dob && $is_error!=1)
@@ -123,6 +128,7 @@ class Dobupdate extends CI_Controller {
 			$searchterm="SELECT * FROM t_subscribers WHERE tx_mobile='".$msisdn."' AND tx_status = 'Registered'";
 			$exists_in_t_subscribers=$this->general_model->is_exist_in_a_table_querystring($searchterm);
 			
+			
 			if($exists_in_t_subscribers)
 			{
 			# Prepaid or Paygo
@@ -160,26 +166,29 @@ class Dobupdate extends CI_Controller {
 						'tx_child_birth' => substr($dob, 8,2).substr($dob, 5,2).substr($dob, 2,2),
             			'dt_child_birth' => $dob,
 					  	'dtt_mod' => mdate('%Y-%m-%d %H:%i:%s', now()),
-				  	);
+						'int_mod_user_key' => 999999, // for API
+				  	);					
 					
 					$success=$this->general_model->update_table('t_subscribers', $upd_data, 'base_reg_id', $all_sub_info->base_reg_id);
 						if($success)
 						{
-						$response["success"] = 1;
-						$response["message"] = 'DOB Updated Successfully';
-						echo json_encode($response);
-						
+						$response1["success"] = 1;
+						$response1["message"] = "DOB Updated Successfully";												
+												
 						$success_msg_data=array(						
-						'error_msg'=>'DOB Updated Successfully',
+						'error_msg'=>'DOB Updated Successfully (Prepaid)',
 						'status'=>1,						
 						'comments'=>'SUCCESS'
 						);			
 						$this->general_model->update_table('apps_all_requests', $success_msg_data, 'request_id', $request_id);
+						
+						echo json_encode($response1);  // Output the success message
+						
 						}
 						else
 						{
-						$response["success"] = 0;
-						$response["message"] = 'Database error in PMRS (t_subscribers)';
+						$response['success'] = 0;
+						$response['message'] = "Database error in PMRS (t_subscribers)";
 						echo json_encode($response);
 						die();
 						}
@@ -202,15 +211,61 @@ class Dobupdate extends CI_Controller {
 					## DEREGISTER Primary Subscriber from Bridge if found
 					if($this->isSubscriberAvailableInBridge($msisdn))
 					{
-						$json = $this->_deregisterFromBridge($msisdn, $data['request_channel'], 'DOB UPDATE');
+						$request_channel="Primary";
+						$json = $this->_deregisterFromBridge($msisdn, $request_channel, 'DOB UPDATE');
 						$tmp = json_decode($json, true);
 							if(isset($tmp['status']) && $tmp['status'] == 'success'){
 								foreach($tmp['info'] as $t){
-							   ## RE-REGISTER in Bridge
-							   if($data['srch_rslt']['subscriber_msisdn'] == $t['msisdn']){
-								   ## 2.1 Re-Register Primary Subscriber in Bridge
-								   $newRegInfo['primary'] = $this->_registerPrimarySubscriberToBridge($data, '2.1');
-							   }						   
+							   	## RE-REGISTER in Bridge
+							   	if($msisdn == $t['msisdn']){
+								   	
+								$data['MSISDN']= $msisdn;
+								$data['Designated_Date']=$dob.' 00:00:00';								
+								$data['Package']="sb";
+								$data['Subscriber_Type']= "Primary";																
+								
+								$data['Dialect']= $all_sub_info->tx_dialect;
+								$data['Timeslot']= 'R'.$all_sub_info->int_timeslot;
+								$data['Subscription_Date']= $all_sub_info->dtt_registration;
+								$data['Deactivation_Date']= $all_sub_info->dtt_service_deactivation;
+	
+									## 2.1 Re-Register Primary Subscriber in Bridge
+								   	$newRegInfo['primary'] = $this->_registerPrimarySubscriberToBridge($data, '2.1');
+								   	
+								 	## 3. Update subscriber's new RegID
+									//$this->subscribermodel->updSubsNewRegId($data, $newRegInfo, $date);
+									
+									$tx_last_menstrual_period = '';
+                					$tx_child_birth = substr($dob, 8,2).substr($dob, 5,2).substr($dob, 2,2);
+                					$dt_last_menstrual_period = null;
+                					$dt_child_birth = $dob;
+									
+									$sql = "UPDATE t_subscribers
+											SET tx_reg_id = '".$this->sanitiseRegId($newRegInfo['primary']['regId'])."'
+												, tx_ref_reg_id = '".$this->sanitiseRegId($newRegInfo['guardian']['regId'])."'
+												, $tx_child_birth = '".$tx_child_birth."'
+												, $dt_child_birth = '".$dob."'
+												, dtt_week_base = '".$dob." 00:00:00'
+												, int_subscriber_type_key = 2
+												, dtt_update_preg_to_baby = '".date('Y-m-d H:i:s')."'
+												, dtt_mod = '".date('Y-m-d H:i:s')."'
+											WHERE int_subscriber_key = ".$all_sub_info->int_subscriber_key;
+									
+									$this->db->query($sql) or die($sql);
+									 
+									## Output
+									$response1["success"] = 1;
+									$response1["message"] = "DOB Updated Successfully";												
+															
+									$success_msg_data=array(						
+									'error_msg'=>'DOB Updated Successfully (Paygo)',
+									'status'=>1,						
+									'comments'=>'SUCCESS'
+									);			
+									$this->general_model->update_table('apps_all_requests', $success_msg_data, 'request_id', $request_id);
+									
+									echo json_encode($response1);  // Output the success message
+							   	}						   
 							}	 
 						}
 					}
@@ -243,7 +298,7 @@ class Dobupdate extends CI_Controller {
 			
 			
 			## ALL VALID
-			$server_reg_id=mdate('%Y%m%d%H%i%s', now()).$request_id;
+			/*$server_reg_id=mdate('%Y%m%d%H%i%s', now()).$request_id;
 				
 				$raw_data=array(
 				'request_id'=>$request_id,	
@@ -274,7 +329,7 @@ class Dobupdate extends CI_Controller {
 				);
 				$this->general_model->update_table('chatbot_all_requests', $error_data, 'request_id', $request_id);																	
 				
-				}
+				}*/
 				
 				
 			}
@@ -298,6 +353,187 @@ class Dobupdate extends CI_Controller {
 		}
 	
 	}
+	
+	function dobcancel()
+	{
+	$is_error=0;
+		$api_key=$this->input->post('api_key', TRUE);		
+		
+		if(($api_key=='C02301120170823APONJONAPPSV2'))
+		{				
+		$data_source='APONJONAPPSV2';			
+		
+		## 	Sec:1 
+		##	If API Key match insert the raw request in TABLE: apps_all_requests
+		$raw_data=array(
+			'raw_params'=>var_export($_POST, true),			
+			'status'=>0,
+			'data_source'=>$data_source,
+			'received_datetime'=>mdate('%Y-%m-%d %H:%i:%s', now())					
+			);
+		
+		$request_id=$this->general_model->save_into_table_and_return_insert_id('apps_all_requests', $raw_data);
+				
+		##	END Sec:1
+		
+		##	Sec:2 
+		##	Parse all params and insert in to TABLE: chatbot_action_requests 
+		## 	Validate all data
+			if($request_id)
+			{						
+			$hw_user_id = $this->input->post('user_id', TRUE);
+			$hw_user_id = empty($hw_user_id) ? NULL : $hw_user_id;
+			
+			$msisdn= $this->input->post('msisdn', TRUE);
+			$msisdn  = empty($msisdn) ? NULL : $msisdn;
+			
+			$dereg_reason=$this->input->post('reason', TRUE);
+			$msisdn  = empty($msisdn) ? NULL : $msisdn;
+			
+			
+			## VALID MSISDN
+			if(!$this->subscriber->isValidMobile($msisdn)){
+				$response["success"] = 0;
+				$response["message"] = 'INVALID MSISDN!';
+				echo json_encode($response);
+				$is_error=1;
+				$error_msg='INVALID MSISDN!';
+			}															
+			
+			## VALID REASON
+			if(!$hw_user_id){
+				$response["success"] = 0;
+				$response["message"] = 'USERID SHOULD NOT EMPTY';
+				echo json_encode($response);
+				$is_error=1;
+				$error_msg='USERID SHOULD NOT EMPTY';
+			}
+			
+			## VALID REASON
+			if(!$dereg_reason){
+				$response["success"] = 0;
+				$response["message"] = 'REASON SHOULD NOT EMPTY';
+				echo json_encode($response);
+				$is_error=1;
+				$error_msg='REASON SHOULD NOT EMPTY';
+			}
+			
+			
+			if($is_error==1)
+			{			
+				$error_msg_data=array(						
+					'error_msg'=>$error_msg,
+					'status'=>1,						
+					'comments'=>'ERRORS'	
+				);			
+				$this->general_model->update_table('apps_all_requests', $error_msg_data, 'request_id', $request_id);	
+				die();
+			}
+			else
+			{
+			$error_msg=NULL;	
+			}											
+			
+			
+			## exists in t_subscribers
+			$searchterm="SELECT * FROM t_subscribers WHERE tx_mobile='".$msisdn."' AND tx_status = 'Registered'";
+			$exists_in_t_subscribers=$this->general_model->is_exist_in_a_table_querystring($searchterm);
+			
+			
+			if($exists_in_t_subscribers)
+			{
+			# Prepaid or Paygo
+			$searchterm2="Select * FROM t_subscribers WHERE tx_mobile='".$msisdn."' AND tx_status = 'Registered'";
+			$all_sub_info=$this->general_model->get_all_single_row_querystring($searchterm2);										
+				  	
+					$upd_data = array(
+						'dobupdatecancel_byhw'=>$hw_user_id,
+						'isdobupdatecancel'=>1,
+						'dobupdatecancel_reason'=>$dereg_reason,
+						'dobupdatecancel_time' => mdate('%Y-%m-%d %H:%i:%s', now()),
+						'int_mod_user_key' => 999999, // for API
+				  	);					
+					
+					$success=$this->general_model->update_table('t_subscribers', $upd_data, 'base_reg_id', $all_sub_info->base_reg_id);
+						if($success)
+						{
+						$response1["success"] = 1;
+						$response1["message"] = "Successfully Cancel";
+												
+						$success_msg_data=array(						
+						'error_msg'=>'Successfully Cancel',
+						'status'=>1,						
+						'comments'=>'SUCCESS'
+						);			
+						$this->general_model->update_table('apps_all_requests', $success_msg_data, 'request_id', $request_id);
+						
+						echo json_encode($response1);  // Output the success message
+						
+						}
+						else
+						{
+						$response['success'] = 0;
+						$response['message'] = "Database error in PMRS (t_subscribers)";
+						echo json_encode($response);
+						die();
+						}
+
+				
+			}
+			else
+			{							
+			$error_msg_data=array(						
+					'error_msg'=>'MSISDN is not exists or deregistered in PMRS',
+					'status'=>1,						
+					'comments'=>'ERRORS'	
+			);			
+			$this->general_model->update_table('apps_all_requests', $error_msg_data, 'request_id', $request_id);	
+			$response["success"] = 0;
+			$response["message"] = 'MSISDN is not exists or deregistered in PMRS (t_subscribers)';
+			echo json_encode($response);
+			die();	
+			}									
+				
+				
+			}
+			else
+			{
+			$response["success"] = 0;
+			$response["message"] = 'Database server might be down! Please try again';
+			echo json_encode($response);
+			die();
+			}
+		
+		
+		## 	END Sec:2	
+		}
+		else
+		{
+		$response["success"] = 0;
+		$response["message"] = 'Wrong API Key';
+		echo json_encode($response);
+		die();	
+		}	
+	
+	}
+	
+	
+	private function _registerPrimarySubscriberToBridge($data, $sl='')
+    {
+        $newRegInfo = array('regId' => '', 'msisdn' => '');
+        $regData = $this->prepNewRegSubscriberBridgeData($data, 'NEW_MOTHER', 'primary');        
+        $json = $this->submitPostData($this->urlRegistrationApi, $regData);
+       
+        $tmp = json_decode($json, true);
+        if($tmp['status']=='success'){
+            $newRegInfo = array(
+                'regId' => "{$tmp['subscriber_id']}", 
+                'msisdn' => $tmp['msisdn']
+            );
+        }
+        
+        return $newRegInfo;
+    }
 	
 	private function getApiToken()
     {
@@ -324,22 +560,7 @@ class Dobupdate extends CI_Controller {
     }
 	
 	
-	 private function _registerPrimarySubscriberToBridge($data, $sl='')
-    {
-        $newRegInfo = array('regId' => '', 'msisdn' => '');
-        $regData = $this->prepNewRegSubscriberBridgeData($data, 'NEW_MOTHER', 'primary');        
-        $json = $this->submitPostData($this->urlRegistrationApi, $regData);
-       
-        $tmp = json_decode($json, true);
-        if($tmp['status']=='success'){
-            $newRegInfo = array(
-                'regId' => "{$tmp['subscriber_id']}", 
-                'msisdn' => $tmp['msisdn']
-            );
-        }
-        
-        return $newRegInfo;
-    }
+	
 	
 	public function isSubscriberAvailableInBridge($msisdn)
     {
@@ -416,6 +637,16 @@ class Dobupdate extends CI_Controller {
         return $content;
     }
 	
+	private function sanitiseRegId($regId)
+    {
+        if(strlen($regId)>0){
+            $prefix = strtolower(substr($regId, 0, 3));
+            if($prefix !== 'reg'){
+                $regId = sprintf('%0.0f', $regId);
+            }
+        }
+        return $regId;
+    }
 	
 	private function prepNewRegSubscriberBridgeData($data, $package, $type='primary')
     {

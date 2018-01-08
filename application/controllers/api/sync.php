@@ -117,6 +117,102 @@ class Sync extends CI_Controller {
 	
 	}
 	
+	function denied_reason()
+	{
+										
+		$data_source='APONJONAPPSV2';			
+		
+		## 	Sec:1 
+		##	If API Key match insert the raw request in TABLE: apps_all_requests
+		$raw_data=array(
+			'raw_params'=>var_export($_POST, true),			
+			'status'=>1,
+			'data_source'=>$data_source,
+			'comments'=>'Sync status req.',
+			'received_datetime'=>mdate('%Y-%m-%d %H:%i:%s', now())					
+			);
+		
+		$request_id=$this->general_model->save_into_table_and_return_insert_id('apps_all_requests', $raw_data);		
+				
+		
+		
+		$this->form_validation->set_rules(array(
+			array(
+				'field' => 'api_key',
+				'label' => 'API Key',
+				'rules' => 'trim|required'
+			),			
+			array(
+				'field' => 'user_id',			// Required User id
+				'label' => 'Tab User Id',
+				'rules' => 'trim|required'
+			)
+			,
+			array(
+				'field' => 'date_from',			// Required date_from
+				'label' => 'Date From',
+				'rules' => 'trim|required'
+			),						
+			array(
+				'field' => 'date_to',			// Required date_to
+				'label' => 'Date To',
+				'rules' => 'trim|required'
+			)
+		));
+	
+	## Run form validation
+		if ($this->form_validation->run() === TRUE)
+		{
+			$user_id=$this->input->post('user_id', TRUE);
+			$api_key=$this->input->post('api_key', TRUE);
+			$date_from=$this->input->post('date_from', TRUE);
+			$date_to=$this->input->post('date_to', TRUE);
+			
+			if ( ! $user = $this->account_model->get_by_username($user_id))   // Table : t_community_agent_login
+			{
+			$response["success"] = 0;
+			$response["message"] = 'Username does not exist';
+			echo json_encode($response);
+			}
+			else
+			{
+				if($api_key=='C02301120170823APONJONAPPSV2')
+				{
+				// CA699106973
+				$query="SELECT s.`MobNum`, s.`Name`, s.`dtt_create`, s.`Status`, s.`HWID`, st.`tx_reason` AS reason, st.`dtt_mod` 
+				FROM `e_subscriber` s 
+				LEFT JOIN `e_subscriber_status` AS st ON st.`int_subscriber_id`=s.`Id`
+				WHERE s.`Status`='Denied' AND st.`tx_status`='Denied' AND s.HWID='".$user_id."' 
+				AND DATE(s.`dtt_create`) BETWEEN '".$date_from."' AND '".$date_to."' 
+				ORDER BY s.`Id` DESC";
+				$result=$this->general_model->get_all_querystring_result($query);						
+					
+					$response["denied_reason"] = $result;  						
+					$profile = array();											
+					echo json_encode($response,true);
+					die();	
+					
+				}
+				else
+				{
+				$response["success"] = 0;
+				$response["message"] = 'Wrong API Key';
+				echo json_encode($response);
+				die();	
+				}
+			}	
+			
+		}
+		else
+		{
+			$response["success"] = 0;
+			$response["message"] = "Error: ".str_replace("\n",'',strip_tags(validation_errors()));
+			echo json_encode($response);
+		}
+		
+	}
+	
+	
 	public function update_apps_all_requests_table($request_id,$update_info)
 	{	
 	$success = $this->general_model->update_table('apps_all_requests', $update_info, 'request_id', $request_id);		

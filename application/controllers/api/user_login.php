@@ -65,8 +65,10 @@ class User_login extends CI_Controller {
 			echo "username=".$username." Password=".$password;
 			die();
 			*/
+			
 			//username=Q0MyNjE2MDQ4MTE= Password=Q0MyNjE2MDQ4MTE=
 			//CC261604728 username=Q0MyNjE2MDQ3Mjg= Password=Q0MyNjE2MDQ3Mjg=
+			// aaaaaa = YWFhYWFh
 			
 			$username=base64_decode($this->input->post('user_name', TRUE));
 			$password=base64_decode($this->input->post('password', TRUE));
@@ -106,6 +108,11 @@ class User_login extends CI_Controller {
 						$profile["union"] =$this->account_model->get_location_name_by_id($user_info->int_union_key,'UN');
 						$profile["organization"] =$this->account_model->get_partner_name_by_id($user_info->int_partner_key);
 						$profile["education_level"] =  $user_info->int_education_level_key;
+						$profile["gender"] =  $user_info->gender;
+						$profile["email"] =  $user_info->email;
+						$profile["dob"] =  $user_info->dtt_agent_date_of_birth;						
+						$profile["occupation"] =  $user_info->occupation;
+						$profile["address"] =  $user_info->address;
 						$profile["expire_on"] =date('Y-m-d H:i:s', strtotime('1 hour'));
 						array_push($response["user_info"], $profile);
 						
@@ -288,7 +295,7 @@ class User_login extends CI_Controller {
 					if($success_or_fail)
 					{
 					$response["success"] = 1;
-					$response["message"] = 'Password reset request successfully placed.';
+					$response["message"] = 'We have received your request and you will get a password from Aponjon team within 24 hours.';
 					echo json_encode($response);	
 					}
 					else
